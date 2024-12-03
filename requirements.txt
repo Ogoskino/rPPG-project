@@ -1,0 +1,4 @@
+mediapipe
+mlflow
+fastapi[standard]
+torch
