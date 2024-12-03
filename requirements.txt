@@ -2,3 +2,6 @@ mediapipe
 mlflow
 fastapi[standard]
 torch
+tabulate
+torchvision
+

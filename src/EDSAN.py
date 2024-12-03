@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from preprocessing.preprocess import device
 
 class temp_AM(nn.Module):
     def __init__(self, in_channels, reduction_ratio=16):
@@ -91,10 +92,12 @@ class VideoCBAM(nn.Module):
 
 # Define the 3EDSAN Model
 class EDSAN(nn.Module):
-    def __init__(self, frames=192, n_channels=3, model='RGB'):
+    def __init__(self, frames=192, n_channels=3, model='RGB', is_cbam = True, is_tam = True):
         super(EDSAN, self).__init__()
 
         self.model = model
+        self.is_cbam = is_cbam
+        self.is_tam = is_tam
 
         self.ConvBlock1 = nn.Sequential(
             nn.Conv3d(n_channels, 16, kernel_size=5, stride=1, padding=2),  # spatial encoding
@@ -146,9 +149,16 @@ class EDSAN(nn.Module):
         x = self.ConvBlock2(x)  # x [batch_size, 32, T/2, 64, 64]
         x = self.MaxpoolSpaTem2(x)  # x [batch_size, 32, T/4, 32, 32]
         x = self.ConvBlock4(x)  # x [batch_size, 64, T/4, 32, 32]
-        x_cbam = self.cbam(x)
-        x_temp = self.temp_AM(x_cbam)
-        x_temp = x_cbam * x_temp
+        if self.is_cbam:
+            x_cbam = self.cbam(x)
+        else:
+            x_cbam = x
+        if self.is_tam:
+            x_temp = self.temp_AM(x_cbam)
+        else:
+            x_temp = x_cbam
+        if self.is_cbam and self.is_tam:
+            x_temp = x_cbam * x_temp
         x = self.conv_reduce(x_temp)
         x = self.upsample(x)  # x [batch_size, 64, T/8, 16, 16]
         x = self.upsample2(x)  # x [batch_size, 64, T/4, 32, 32]
@@ -159,15 +169,18 @@ class EDSAN(nn.Module):
         rPPG = x.view(-1, length)  # Output shape [batch_size, frames]
         return rPPG
     
+R_3EDSAN = EDSAN().to(device)
+T_3EDSAN = EDSAN(n_channels=1, model='thermal').to(device)
+
+
+
+
 
 
 if __name__ == "__main__":
 
     tensor1 = torch.rand(2, 4, 192, 128, 128)
-    rgb_model = EDSAN()
-    result1 = rgb_model(tensor1)
+    result1 = R_3EDSAN(tensor1)
     print(result1.shape)
-
-    th_model = EDSAN(n_channels=1, model='thermal')
-    result2 = th_model(tensor1)
+    result2 = T_3EDSAN(tensor1)
     print(result2.shape)

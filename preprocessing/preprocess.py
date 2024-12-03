@@ -1,6 +1,10 @@
 import torch
 import numpy as np
-from dataloader import load_iBVP_dataset
+from preprocessing.dataloader import load_iBVP_dataset
+
+
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def normalize_array(arr):
     """
