@@ -282,3 +282,26 @@ def calculate_tmc(signals, reshape_size=28):
 
     # Return the average TMC
     return tmc_average
+
+
+
+def compute_accuracy(TMC_true, TMC_model):
+    """
+    Compute the accuracy based on the given formula.
+    
+    Accuracy = 1 - |TMC_true - TMC_model| / max(1, |TMC_true - TMC_model|)
+    
+    Parameters:
+    TMC_true (float or int): The true value of TMC.
+    TMC_model (float or int): The model's predicted value of TMC.
+    
+    Returns:
+    float: The computed accuracy.
+    """
+    # Calculate the absolute difference
+    diff = abs(TMC_true - TMC_model)
+    
+    # Compute the accuracy using the formula
+    accuracy = 1 - (diff / max(1, diff))
+    
+    return accuracy
