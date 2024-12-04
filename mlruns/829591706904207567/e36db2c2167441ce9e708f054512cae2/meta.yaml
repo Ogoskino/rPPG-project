@@ -1,0 +1,15 @@
+artifact_uri: mlflow-artifacts:/829591706904207567/e36db2c2167441ce9e708f054512cae2/artifacts
+end_time: 1733347326803
+entry_point_name: ''
+experiment_id: '829591706904207567'
+lifecycle_stage: active
+run_id: e36db2c2167441ce9e708f054512cae2
+run_name: RGB
+run_uuid: e36db2c2167441ce9e708f054512cae2
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1733347198481
+status: 3
+tags: []
+user_id: jkogo

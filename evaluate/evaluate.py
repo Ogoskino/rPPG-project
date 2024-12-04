@@ -1,8 +1,6 @@
 from evaluate.metrics import *
 import torch
-from torch.utils.data import Subset, DataLoader
-from sklearn.model_selection import KFold
-from tabulate import tabulate
+import os
 
 
 
@@ -43,13 +41,56 @@ def compute_metrics(outputs, labels, sampling_rate=28):
 
     return mae, rmse, pcc, snr_pred, tmc, tmc_l, tmc_acc
 
-def save_best_model(model, metrics, best_rmse, file_path):
+
+def save_best_model(model, metrics, best_rmse, filename, folder_path="model_paths"):
     """Saves the model if current RMSE is the best."""
+
+    # Ensure the folder exists, create it if it doesn't
+    os.makedirs(folder_path, exist_ok=True)
+    
+    # Combine folder and filename to get the full path
+    file_path = os.path.join(folder_path, filename)
+
+    # Save the model if the current RMSE is the best
     if metrics['RMSE'] < best_rmse:
         torch.save(model.state_dict(), file_path)
         return metrics['RMSE'], metrics
+    
     return best_rmse, None
 
+
+
+def log_model_summary(model, model_name, input_size, device, folder_path="model_summaries"):
+    """
+    Logs the summary of the model to MLflow and saves it in a specified folder.
+    
+    Args:
+        model: The PyTorch model instance.
+        model_name: The name of the model (e.g., "RGB", "Thermal").
+        input_size: The input size tuple to the model.
+        device: The device (e.g., "cpu" or "cuda").
+        folder_path: The folder path where the summary file will be saved (default: "model_summaries").
+    """
+    # Ensure the folder exists
+    os.makedirs(folder_path, exist_ok=True)
+    
+    model = model.to(device)
+    
+    # Get model summary
+    summary_text = str(summary(model, input_size=input_size, device=device.type))
+
+    # Save model summary as a text file in the folder
+    summary_file_path = os.path.join(folder_path, f"{model_name}_summary.txt")
+    
+    with open(summary_file_path, "w", encoding="utf-8") as f:
+        f.write(summary_text)
+    
+    # Log the summary file as an artifact in MLflow
+    mlflow.log_artifact(summary_file_path)
+    
+    print(f"Model summary saved and logged to MLflow: {summary_file_path}")
+
+    
 def evaluate_ampnet_model(fusion_model, dataloader, criterion, device, sampling_rate=28):
     """Evaluates the fusion model and computes metrics."""
     fusion_model.eval()

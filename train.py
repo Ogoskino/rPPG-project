@@ -4,10 +4,10 @@ from src.PhysNet import PhysNet_padding_Encoder_Decoder_MAX
 from src.RTrPPG import N3DED64
 from evaluate.loss import *
 import mlflow
-from mlflow.models import set_signature
-import os
+from mlflow.models.signature import infer_signature
 import numpy as np
 import torch
+import os
 from sklearn.model_selection import KFold
 from torch.utils.data import Subset, DataLoader
 from tabulate import tabulate
@@ -18,10 +18,10 @@ from preprocessing.preprocess import device
 from preprocessing.dataloader import load_iBVP_dataset
 from preprocessing.preprocess import *
 from src.AMPNET import *
+from torchinfo import summary
 
-os.environ["MLFOW_TRACKIN_URI"] = "https://dagshub.com/jkogoskino/ml_project_repo.mlflow"
-os.environ["MLFLOW_TRACKING_USERNAME"] = "jkogoskino"
-os.environ["MLFLOW_TRACKING_PASSWORD"] = "9fd2591fb0fdf03c2e97f8ee1775575b7bb6323c"
+mlflow.set_tracking_uri("http://127.0.0.1:5000")
+mlflow.set_experiment("rppg_project")
 
 model_classes = [EDSAN, EDSAN]  # Model classes instead of instances
 criterion_classes = [nn.MSELoss, nn.MSELoss]
@@ -29,6 +29,52 @@ optimizer_classes = [optim.Adam, optim.Adam]
 scheduler_classes = [None, None] 
 model_names = ['RGB', 'Thermal']
 
+
+
+
+def log_model_summary(model, model_name, input_size, device, folder_path="model_summaries"):
+    """
+    Logs the summary of the model to MLflow and saves it in a specified folder.
+    
+    Args:
+        model: The PyTorch model instance.
+        model_name: The name of the model (e.g., "RGB", "Thermal").
+        input_size: The input size tuple to the model.
+        device: The device (e.g., "cpu" or "cuda").
+        folder_path: The folder path where the summary file will be saved (default: "model_summaries").
+    """
+    # Ensure the folder exists
+    os.makedirs(folder_path, exist_ok=True)
+    
+    model = model.to(device)
+    
+    # Get model summary
+    summary_text = str(summary(model, input_size=input_size, device=device.type))
+
+    # Save model summary as a text file in the folder
+    summary_file_path = os.path.join(folder_path, f"{model_name}_summary.txt")
+    
+    with open(summary_file_path, "w", encoding="utf-8") as f:
+        f.write(summary_text)
+    
+    # Log the summary file as an artifact in MLflow
+    mlflow.log_artifact(summary_file_path)
+    
+    print(f"Model summary saved and logged to MLflow: {summary_file_path}")
+
+
+def log_trained_model(model, model_name, input_sample, output_sample, device):
+    # Ensure output_sample is detached before converting to numpy
+    output_sample_np = output_sample.detach().cpu().numpy()
+    input_sample_np = input_sample.cpu().numpy()
+
+    signature = infer_signature(input_sample_np, output_sample_np)
+    mlflow.pytorch.log_model(
+        pytorch_model=model,
+        artifact_path=model_name,
+        input_example=input_sample_np,
+        signature=signature,
+    )
 
 
 def initialize_model(model_class, model_name, criterion_classes, optimizer_classes, scheduler_classes, model_idx, device):
@@ -122,50 +168,73 @@ def train_and_evaluate(models, n_splits, model_names, device, data, label):
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
     fold_results_dict = {name: [] for name in model_names}
     average_results_dict = {name: {} for name in model_names}
-
+    
     for model_idx, model_class in enumerate(models):
         model_name = model_names[model_idx]
         dataset = Dataset(data=data, labels=label)
         print(f"\nTraining Model {model_name} with {n_splits}-fold Cross-Validation")
-        fold_results = []
 
-        for fold, (train_idx, val_idx) in enumerate(kf.split(dataset)):
-            train_subset = Subset(dataset, train_idx)
-            val_subset = Subset(dataset, val_idx)
+        with mlflow.start_run(run_name=model_name, nested=True):
+            mlflow.log_param("Model Name", model_name)
+            mlflow.log_param("K-Folds", n_splits)
 
-            train_dataloader = DataLoader(train_subset, batch_size=8, shuffle=True)
-            val_dataloader = DataLoader(val_subset, batch_size=8, shuffle=False)
+            fold_results = [] 
 
-            model, criterion, optimizer, scheduler = initialize_model(
-                model_class, model_name, criterion_classes, optimizer_classes, scheduler_classes, model_idx, device
-            )
+            for fold, (train_idx, val_idx) in enumerate(kf.split(dataset)):
+                train_subset = Subset(dataset, train_idx)
+                val_subset = Subset(dataset, val_idx)
 
-            best_val_rmse = float('inf')
-            best_metrics = {}
+                train_dataloader = DataLoader(train_subset, batch_size=8, shuffle=True)
+                val_dataloader = DataLoader(val_subset, batch_size=8, shuffle=False)
 
-            for epoch in range(1):
-                train_loss = train_one_epoch(model, train_dataloader, criterion, optimizer, device, model_name, batch_size=8)
-                val_loss, all_outputs, all_labels = evaluate_model(model, val_dataloader, criterion, device, model_name)
+                model, criterion, optimizer, scheduler = initialize_model(
+                    model_class, model_name, criterion_classes, optimizer_classes, scheduler_classes, model_idx, device
+                )
 
-                metrics = compute_metrics(all_outputs, all_labels)
-                mae, rmse, pcc, snr_pred, tmc, tmc_l, acc = metrics
+                # Log the model summary
+                input_size = (8, 1, 192, 64, 64) if model_name == 'Thermal' else (8, 3, 192, 64, 64)
+                if fold == 1:
+                    log_model_summary(model, model_name, input_size, device)
 
-                if scheduler:
-                    scheduler.step()
+                best_val_rmse = float('inf')
+                best_metrics = {}
 
-                print(f"Model {model_name}, Fold {fold + 1}, Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
-                if rmse < best_val_rmse:
-                    best_val_rmse, best_metrics = save_best_model(
-                        model, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'TMC': tmc, 'TMC_l': tmc_l, 'ACC': acc},
-                        best_val_rmse, f'best_model_{model_name}_fold_{fold + 1}.pth'
-                    )
+                for epoch in range(1):
+                    train_loss = train_one_epoch(model, train_dataloader, criterion, optimizer, device, model_name, batch_size=8)
+                    val_loss, all_outputs, all_labels = evaluate_model(model, val_dataloader, criterion, device, model_name)
 
-            fold_results.append(best_metrics)
+                    metrics = compute_metrics(all_outputs, all_labels)
+                    mae, rmse, pcc, snr_pred, tmc, tmc_l, acc = metrics
 
-        # Aggregate results
-        average_results = {metric: np.mean([fold[metric] for fold in fold_results]) for metric in fold_results[0]}
-        fold_results_dict[model_name] = fold_results
-        average_results_dict[model_name] = average_results
+                    if scheduler:
+                        scheduler.step()
+
+                    print(f"Model {model_name}, Fold {fold + 1}, Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
+                    if rmse < best_val_rmse:
+                        best_val_rmse, best_metrics = save_best_model(
+                            model, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'TMC': tmc, 'TMC_l': tmc_l, 'ACC': acc},
+                            best_val_rmse, f'best_model_{model_name}_fold_{fold + 1}.pth'
+                        )
+
+                fold_results.append(best_metrics)
+
+                    # Log the best model as an artifact
+                mlflow.log_artifact(f'model_paths/best_model_{model_name}_fold_{fold + 1}.pth')
+                input_sample = next(iter(train_dataloader))[0][:1].to(device)  # Single batch, single example
+                output_sample = model(input_sample)
+
+                # Log the trained model
+                log_trained_model(model, model_name, input_sample, output_sample, device)
+
+            # Aggregate results
+            average_results = {metric: np.mean([fold[metric] for fold in fold_results]) for metric in fold_results[0]}
+            fold_results_dict[model_name] = fold_results
+            average_results_dict[model_name] = average_results
+            # Log average results
+            for metric, value in average_results.items():
+                mlflow.log_metric(metric, value)
+
+            
 
     return fold_results_dict, average_results_dict
 
@@ -253,35 +322,35 @@ if __name__ == "__main__":
 
 
 
-    #videos = torch.rand(56, 4, 192, 64, 64)
-    #label = torch.rand(56, 192)
-    #video_chunks, label_chunks = extract_segments(videos, label)
-    #print(videos.shape)  # Should be [num_chunks, chunk_size, height, width, channels]
-    #print(label.shape)  # Should be [num_chunks, chunk_size]
-    #fold_results, avg_results = train_and_evaluate(
-    #    model_classes, n_splits=2, model_names=model_names, device=device,data=videos, label=label
-    #)
-    #Print Results
-    #print("\nSummary of Results Across All Models and Folds:")
-    #for model_name in model_names:
-    #    print(f"\nResults for {model_name}:")
-    #    print(tabulate(fold_results[model_name], headers="keys"))
-
-    #print("\nAverage Results for Each Model Across All Folds:")
-    #print(tabulate(avg_results.items(), headers=["Model Name", "Metrics"]))
-
-
-
     videos = torch.rand(56, 4, 192, 64, 64)
     label = torch.rand(56, 192)
+    #video_chunks, label_chunks = extract_segments(videos, label)
+    print(videos.shape)  # Should be [num_chunks, chunk_size, height, width, channels]
+    print(label.shape)  # Should be [num_chunks, chunk_size]
+    fold_results, avg_results = train_and_evaluate(
+        model_classes, n_splits=2, model_names=model_names, device=device,data=videos, label=label
+    )
+    #Print Results
+    print("\nSummary of Results Across All Models and Folds:")
+    for model_name in model_names:
+        print(f"\nResults for {model_name}:")
+        print(tabulate(fold_results[model_name], headers="keys"))
 
-    fusion_dataloader = create_ampnet_dataloader(videos, label, batch_size=8)
+    print("\nAverage Results for Each Model Across All Folds:")
+    print(tabulate(avg_results.items(), headers=["Model Name", "Metrics"]))
+
+
+
+    #videos = torch.rand(56, 4, 192, 64, 64)
+    #label = torch.rand(56, 192)
+
+    #fusion_dataloader = create_ampnet_dataloader(videos, label, batch_size=8)
     # Train the fusion model using the defined fusion_dataloader
-    fold_results, average_results, fold_results_rgb, average_results_rgb = train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device)
+    #fold_results, average_results, fold_results_rgb, average_results_rgb = train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device)
 
     # Print the tabulated results for fold results
-    print("\nSummary of Results Across All Folds:")
-    print(tabulate(fold_results, headers="keys"))
-    print(tabulate(fold_results_rgb, headers="keys"))
-    print(tabulate(average_results.items(), headers=["Metric", "Average Value"], tablefmt="grid"))
-    print(tabulate(average_results_rgb.items(), headers=["Metric", "Average Value"], tablefmt="grid"))
+    #print("\nSummary of Results Across All Folds:")
+    #print(tabulate(fold_results, headers="keys"))
+    #print(tabulate(fold_results_rgb, headers="keys"))
+    #print(tabulate(average_results.items(), headers=["Metric", "Average Value"], tablefmt="grid"))
+    #print(tabulate(average_results_rgb.items(), headers=["Metric", "Average Value"], tablefmt="grid"))

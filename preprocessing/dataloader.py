@@ -7,7 +7,7 @@ import cv2
 import logging
 
 
-logging.basicConfig(filename="rppg.app", filemode='w', level=logging.DEBUG)
+logger = logging.basicConfig(filename="rppg.app", filemode='w', level=logging.DEBUG)
 
 def sample_images(rgb_faces, thermal_faces, labels, target_length=5376):
     # Get the number of images in each modality
