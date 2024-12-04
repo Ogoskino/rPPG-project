@@ -141,7 +141,11 @@ class EDSAN(nn.Module):
         if self.model=='RGB':
             x = xh[:, :3, :, :, :]  # Shape: [batch_size, 3, frames, 128, 128]
         else:
-            x = xh[:, 3:, :, :, :]  # Shape: [batch_size, 3, frames, 128, 128]
+            [_, channelx, _, _, _] = xh.shape
+            if channelx == 1:
+                x = xh
+            else:
+                x = xh[:, 3:, :, :, :]  # Shape: [batch_size, 3, frames, 128, 128]
         [batch, channel, length, width, height] = x.shape
 
         x = self.ConvBlock1(x)  # x [batch_size, 16, T, 128, 128]

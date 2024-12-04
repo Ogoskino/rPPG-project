@@ -50,3 +50,38 @@ def save_best_model(model, metrics, best_rmse, file_path):
         return metrics['RMSE'], metrics
     return best_rmse, None
 
+def evaluate_ampnet_model(fusion_model, dataloader, criterion, device, sampling_rate=28):
+    """Evaluates the fusion model and computes metrics."""
+    fusion_model.eval()
+    val_loss = 0.0
+    all_outputs, all_labels, all_outputs_rgb = [], [], []
+
+    with torch.no_grad():
+        for rgb_inputs, thermal_inputs, labels in dataloader:
+            rgb_inputs = rgb_inputs.to(device)
+            thermal_inputs = thermal_inputs.to(device)
+            labels = labels.to(device)
+
+            # Forward pass
+            outputs, outputs_rgb, _ = fusion_model(rgb_inputs, thermal_inputs)
+
+            # Compute loss
+            loss = criterion(outputs, labels)
+            val_loss += loss.item() * rgb_inputs.size(0)
+
+            all_outputs.append(outputs)
+            all_outputs_rgb.append(outputs_rgb)
+            all_labels.append(labels)
+
+    val_loss /= len(dataloader.dataset)
+    all_outputs = torch.cat(all_outputs).cpu().numpy()
+    all_outputs_rgb = torch.cat(all_outputs_rgb).cpu().numpy()
+    all_labels = torch.cat(all_labels).cpu().numpy()
+
+    # Compute metrics
+    metrics = compute_metrics(all_outputs, all_labels, sampling_rate)
+    metrics_rgb = compute_metrics(all_outputs_rgb, all_labels, sampling_rate)
+
+    return val_loss, metrics, metrics_rgb
+
+
