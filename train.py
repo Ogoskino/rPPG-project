@@ -163,9 +163,40 @@ def train_one_ampnet_epoch(fusion_model, train_loader, criterion, optimizer, dev
     return epoch_loss
 
 
+def create_kfold_dataloaders(dataset, batch_size, k=5, mode="train"):
+    """Creates K-fold DataLoaders for the given dataset.
+    
+    Args:
+        dataset (Dataset): The dataset to split.
+        batch_size (int): The batch size for the DataLoader.
+        k (int): The number of splits (default is 5).
+        mode (str): The mode for creating DataLoaders. If "train", create train/validation splits; 
+                    If not "train" (e.g., "eval"), use the entire dataset for evaluation.
+    
+    Returns:
+        list: A list of tuples containing the DataLoaders for each fold.
+    """
+    kfold = KFold(n_splits=k, shuffle=True, random_state=42)
+    dataloaders = []
+
+    for train_idx, val_idx in kfold.split(dataset):
+        if mode == "train":
+            # Create DataLoaders for training and validation
+            train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+            val_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+            dataloaders.append((train_dataloader, val_dataloader))
+        else:
+            # Use the entire dataset for evaluation
+            val_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+            dataloaders.append((None, val_dataloader))  # No train loader in eval mode
+
+    return dataloaders
+
+
 def train_and_evaluate(models, n_splits, model_names, device, data, label):
     """Performs k-fold cross-validation for multiple models."""
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
     fold_results_dict = {name: [] for name in model_names}
     average_results_dict = {name: {} for name in model_names}
     
@@ -180,36 +211,43 @@ def train_and_evaluate(models, n_splits, model_names, device, data, label):
 
             fold_results = [] 
 
-            for fold, (train_idx, val_idx) in enumerate(kf.split(dataset)):
-                train_subset = Subset(dataset, train_idx)
-                val_subset = Subset(dataset, val_idx)
+            # Create K-fold DataLoaders
+            dataloaders = create_kfold_dataloaders(dataset, batch_size=8, k=n_splits)
 
-                train_dataloader = DataLoader(train_subset, batch_size=8, shuffle=True)
-                val_dataloader = DataLoader(val_subset, batch_size=8, shuffle=False)
+            for fold, (train_dataloader, val_dataloader) in enumerate(dataloaders):
+                print(f"\nTraining Model {model_name}, Fold {fold + 1}/{n_splits}")
 
+                # Initialize model, criterion, optimizer, and scheduler
                 model, criterion, optimizer, scheduler = initialize_model(
                     model_class, model_name, criterion_classes, optimizer_classes, scheduler_classes, model_idx, device
                 )
 
-                # Log the model summary
+                # Log the model summary on the first fold
                 input_size = (8, 1, 192, 64, 64) if model_name == 'Thermal' else (8, 3, 192, 64, 64)
-                if fold == 1:
+                if fold == 0:  # Log summary for the first fold
                     log_model_summary(model, model_name, input_size, device)
 
                 best_val_rmse = float('inf')
                 best_metrics = {}
 
-                for epoch in range(1):
+                for epoch in range(1):  # Adjust the number of epochs as needed
+                    # Training step
                     train_loss = train_one_epoch(model, train_dataloader, criterion, optimizer, device, model_name, batch_size=8)
+
+                    # Evaluation step
                     val_loss, all_outputs, all_labels = evaluate_model(model, val_dataloader, criterion, device, model_name)
 
+                    # Compute metrics
                     metrics = compute_metrics(all_outputs, all_labels)
                     mae, rmse, pcc, snr_pred, tmc, tmc_l, acc = metrics
 
                     if scheduler:
                         scheduler.step()
 
-                    print(f"Model {model_name}, Fold {fold + 1}, Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
+                    print(f"Model {model_name}, Fold {fold + 1}, Epoch {epoch + 1}, "
+                          f"Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
+
+                    # Save best model based on RMSE
                     if rmse < best_val_rmse:
                         best_val_rmse, best_metrics = save_best_model(
                             model, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'TMC': tmc, 'TMC_l': tmc_l, 'ACC': acc},
@@ -220,7 +258,7 @@ def train_and_evaluate(models, n_splits, model_names, device, data, label):
 
                 fold_results.append(best_metrics)
 
-                    # Log the best model as an artifact
+                # Log the best model as an artifact
                 mlflow.log_artifact(f'model_paths/best_model_{model_name}_fold_{fold + 1}.pth')
                 input_sample = next(iter(train_dataloader))[0][:1].to(device)  # Single batch, single example
                 output_sample = model(input_sample)
@@ -228,35 +266,29 @@ def train_and_evaluate(models, n_splits, model_names, device, data, label):
                 # Log the trained model
                 log_trained_model(model, model_name, input_sample, output_sample, device)
 
-            # Aggregate results
+            # Aggregate fold results for the current model
             average_results = {metric: np.mean([fold[metric] for fold in fold_results]) for metric in fold_results[0]}
             fold_results_dict[model_name] = fold_results
             average_results_dict[model_name] = average_results
-            # Log average results
+
+            # Log average results for the model
             for metric, value in average_results.items():
                 mlflow.log_metric(metric, value)
-
-            
 
     return fold_results_dict, average_results_dict
 
 
-# Updated training function for Fusion Model using 4-fold cross-validation
-def train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device):
+
+def train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=torch.device('cuda')):
     """Trains and evaluates AMPNet with k-fold cross-validation."""
-    kf = KFold(n_splits=num_folds, shuffle=True, random_state=42)
-    data_length = len(fusion_dataloader.dataset)
-
+    
     fold_results, fold_results_rgb = [], []
-
-    for fold, (train_idx, val_idx) in enumerate(kf.split(range(data_length))):
+    
+    # Create K-fold DataLoaders using the provided function
+    dataloaders = create_kfold_dataloaders(fusion_dataloader.dataset, batch_size=8, k=num_folds)
+    
+    for fold, (train_loader, val_loader) in enumerate(dataloaders):
         print(f"Fold {fold + 1}/{num_folds}")
-
-        # Prepare train and validation data
-        train_subset = Subset(fusion_dataloader.dataset, train_idx)
-        val_subset = Subset(fusion_dataloader.dataset, val_idx)
-        train_loader = DataLoader(train_subset, batch_size=8, shuffle=True)
-        val_loader = DataLoader(val_subset, batch_size=8, shuffle=False)
 
         # Initialize models and fusion model
         rgb_models, thermal_models = load_models(R_3EDSAN, T_3EDSAN, device)
@@ -289,8 +321,8 @@ def train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device):
                     best_val_rmse, f'best_model_AMPNet_fold_{fold + 1}.pth'
                 )
                 print(f"Fold {fold + 1}: Best model saved with Validation RMSE: {best_val_rmse:.4f}")
-                plot_hr(all_outputs, all_labels, model_name, sampling_rate=28)
-                plot_bvp(all_outputs, all_labels, model_name)
+                plot_hr(all_outputs, all_labels, model_name="AMPNet", sampling_rate=28)
+                plot_bvp(all_outputs, all_labels, model_name="AMPNet")
             
             mae, rmse, pcc, snr_pred, tmc, tmc_l, acc = metrics_rgb
             print(f"R-3EDSAN, Fold {fold + 1}, Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
@@ -300,8 +332,9 @@ def train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device):
                     best_val_rmse_rgb, f'best_model_RGB_fold_{fold + 1}.pth'
                 )
                 print(f"Fold {fold + 1}: Best model saved with Validation RMSE: {best_val_rmse_rgb:.4f}")
-                plot_hr(all_outputs_rgb, all_labels, model_name, sampling_rate=28)
-                plot_bvp(all_outputs_rgb, all_labels, model_name)
+                plot_hr(all_outputs_rgb, all_labels, model_name="R-3EDSAN", sampling_rate=28)
+                plot_bvp(all_outputs_rgb, all_labels, model_name="R-3EDSAN")
+
         # Save fold results
         fold_results.append(best_metrics)
         fold_results_rgb.append(best_metrics_rgb)
