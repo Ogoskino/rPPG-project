@@ -163,6 +163,48 @@ def train_one_ampnet_epoch(fusion_model, train_loader, criterion, optimizer, dev
     return epoch_loss
 
 
+def create_custom_folds(dataset_length):
+    """Create custom folds based on skin tone groups."""
+    num_samples_per_skin_tone = dataset_length // 4
+    indices_A = np.arange(0, num_samples_per_skin_tone)
+    indices_B = np.arange(num_samples_per_skin_tone, 2 * num_samples_per_skin_tone)
+    indices_C = np.arange(2 * num_samples_per_skin_tone, 3 * num_samples_per_skin_tone)
+    indices_D = np.arange(3 * num_samples_per_skin_tone, 4 * num_samples_per_skin_tone)
+
+    folds = [
+        (np.hstack([indices_A, indices_B, indices_C]), indices_D),
+        (np.hstack([indices_A, indices_B, indices_D]), indices_C),
+        (np.hstack([indices_A, indices_C, indices_D]), indices_B),
+        (np.hstack([indices_B, indices_C, indices_D]), indices_A)
+    ]
+    return folds
+
+
+def create_custom_dataloaders(dataset, batch_size, k=4, mode="train"):
+    """Creates custom DataLoaders for the given dataset based on skin tone groups."""
+    dataset_length = len(dataset)
+    folds = create_custom_folds(dataset_length)  # Create the custom folds
+    
+    dataloaders = []
+
+    for train_idx, val_idx in folds:
+        if mode == "train":
+            # Create train and validation subsets using the indices from the custom folds
+            train_subset = Subset(dataset, train_idx)
+            val_subset = Subset(dataset, val_idx)
+
+            # Create DataLoaders for the current fold
+            train_dataloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
+            val_dataloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
+
+            dataloaders.append((train_dataloader, val_dataloader))
+        else:
+            val_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+            dataloaders.append((None, val_dataloader))  # No train loader in eval mode
+
+    return dataloaders
+
 def create_kfold_dataloaders(dataset, batch_size, k=5, mode="train"):
     """Creates K-fold DataLoaders for the given dataset.
     

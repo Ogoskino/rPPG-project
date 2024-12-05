@@ -1,0 +1,15 @@
+artifact_uri: mlflow-artifacts:/733321842450044039/b5e2ed695e0a46d2a1bba0e8596072f9/artifacts
+end_time: 1733413176480
+entry_point_name: ''
+experiment_id: '733321842450044039'
+lifecycle_stage: active
+run_id: b5e2ed695e0a46d2a1bba0e8596072f9
+run_name: clean-smelt-956
+run_uuid: b5e2ed695e0a46d2a1bba0e8596072f9
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1733413141101
+status: 3
+tags: []
+user_id: jkogo

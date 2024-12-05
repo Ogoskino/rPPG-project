@@ -1,0 +1,15 @@
+artifact_uri: mlflow-artifacts:/733321842450044039/7b9d5902bc894cc0a98194a453ec7b4d/artifacts
+end_time: 1733413111401
+entry_point_name: ''
+experiment_id: '733321842450044039'
+lifecycle_stage: active
+run_id: 7b9d5902bc894cc0a98194a453ec7b4d
+run_name: crawling-perch-791
+run_uuid: 7b9d5902bc894cc0a98194a453ec7b4d
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1733413109959
+status: 4
+tags: []
+user_id: jkogo

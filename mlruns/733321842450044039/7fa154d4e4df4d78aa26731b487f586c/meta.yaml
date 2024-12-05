@@ -1,0 +1,15 @@
+artifact_uri: mlflow-artifacts:/733321842450044039/7fa154d4e4df4d78aa26731b487f586c/artifacts
+end_time: 1733412931999
+entry_point_name: ''
+experiment_id: '733321842450044039'
+lifecycle_stage: active
+run_id: 7fa154d4e4df4d78aa26731b487f586c
+run_name: skittish-deer-361
+run_uuid: 7fa154d4e4df4d78aa26731b487f586c
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1733412930392
+status: 4
+tags: []
+user_id: jkogo
