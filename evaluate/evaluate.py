@@ -3,7 +3,7 @@ import torch
 import os
 import mlflow
 from torchinfo import summary
-
+from evaluate.plots import *
 
 
 def evaluate_model(model, dataloader, criterion, device, model_name):
@@ -42,6 +42,15 @@ def compute_metrics(outputs, labels, sampling_rate=28):
     tmc_acc = compute_accuracy(tmc_l, tmc)
 
     return mae, rmse, pcc, snr_pred, tmc, tmc_l, tmc_acc
+
+def plot_bvp(outputs, labels, model_name):
+    plot_bvp_signals(outputs, labels, model_name)
+
+
+def plot_hr(outputs, labels, model_name, sampling_rate=28):
+    """Calculates and returns various metrics."""
+    hr_pred, hr_true, _ = get_peak_frequencies_and_snr_batch(outputs, labels, sampling_rate)
+    plot_heart_rate(hr_true, hr_pred, model_name)
 
 
 def save_best_model(model, metrics, best_rmse, filename, folder_path="model_paths"):
@@ -125,6 +134,6 @@ def evaluate_ampnet_model(fusion_model, dataloader, criterion, device, sampling_
     metrics = compute_metrics(all_outputs, all_labels, sampling_rate)
     metrics_rgb = compute_metrics(all_outputs_rgb, all_labels, sampling_rate)
 
-    return val_loss, metrics, metrics_rgb
+    return val_loss, metrics, metrics_rgb, all_outputs, all_outputs_rgb, all_labels
 
 

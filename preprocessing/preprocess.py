@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from preprocessing.dataloader import load_iBVP_dataset
+from preprocessing.dataloader import *
 
 
 
@@ -22,7 +22,7 @@ def normalize_array(arr):
     return normalized_arr
 
 
-def preprocess_data(rgb_face, thermal_face, label):
+def preprocess_iBVP_data(rgb_face, thermal_face, label):
     thermal_array = np.expand_dims(thermal_face, axis=-1)
     rgb_faces = np.array(rgb_face)/rgb_face.max()
     thermal_array = np.array(thermal_array)/thermal_array.max()
@@ -32,30 +32,48 @@ def preprocess_data(rgb_face, thermal_face, label):
     b = normalize_array(np.array(bvps))
     return a, b
 
-def extract_segments(data, ppg_signals, segment_length=192):
-    segments = []
-    ppg_segments = []
-    for i in range(data.shape[0]):  # Loop over subjects
-        for start_frame in range(0, data.shape[1] - segment_length + 1, segment_length):
-            end_frame = start_frame + segment_length
-            segments.append(data[i, start_frame:end_frame])
-            ppg_segments.append(ppg_signals[i, start_frame:end_frame])
-    return torch.stack(segments), torch.stack(ppg_segments)
+def preprocess_PURE_data(rgb_face, label):
+    videos = np.array(rgb_face)/rgb_face.max()
+    bvps = label
+    a = np.array(videos)
+    b = normalize_array(np.array(bvps))
+    return a, b
 
+def extract_segments(videos, bvps, sequence_length=192):
 
-def to_tensor(a, b):
-    videos = torch.tensor(a, dtype=torch.float32)
-    labels = torch.tensor(b, dtype=torch.float32)
-    return videos, labels
+    total_frames, height, width, num_channels = videos.shape
+    assert total_frames % sequence_length == 0, "Total frames must be divisible by sequence length."
+    
+    # Define reshape shapes
+    video_shape = (-1, num_channels, sequence_length, height, width)
+    label_shape = (-1, sequence_length)
+    
+    # Reshape and convert to tensors
+    video_chunks = torch.tensor(videos.reshape(video_shape), dtype=torch.float32)
+    label_chunks = torch.tensor(bvps.reshape(label_shape), dtype=torch.float32)
+    
+    return video_chunks, label_chunks
+
 
 
 
 
 if __name__ == "__main__":
-    dataset_path = r'C:\Users\jkogo\OneDrive\Desktop\PHD resources\datasets\iBVP_Dataset'
-    rgb_face, thermal_face, label = load_iBVP_dataset(dataset_path)
-    a, b = preprocess_data(rgb_face, thermal_face, label)
-    videos, labels = to_tensor(a,b)
-    video_chunks, label_chunks = extract_segments(videos, labels)
-    print(video_chunks.shape)  # Should be [num_chunks, chunk_size, height, width, channels]
-    print(label_chunks.shape)  # Should be [num_chunks, chunk_size]
+
+    data = 'iBVP'
+
+    if data == 'iBVP':
+        dataset_path = r'C:\Users\jkogo\OneDrive\Desktop\PHD resources\datasets\iBVP_Dataset'
+        rgb_face, thermal_face, label = load_iBVP_dataset(dataset_path)
+        a, b = preprocess_iBVP_data(rgb_face, thermal_face, label)
+        video_chunks, label_chunks = extract_segments(a, b)
+        print(video_chunks.shape)  # Should be [num_chunks, chunk_size, height, width, channels]
+        print(label_chunks.shape)  # Should be [num_chunks, chunk_size]
+
+    else:
+        base_path = r'C:\Users\n1071552\Desktop\Pure'
+        videos_pure, bvps_pure = extract_PURE_videos_and_bvps(base_path)
+        a_pure, b_pure = preprocess_PURE_data(videos_pure, bvps_pure)
+        video_chunks_pure, label_chunks_pure = extract_segments(a_pure, b_pure)
+        print(video_chunks_pure.shape)  # Should be [num_chunks, chunk_size, height, width, channels]
+        print(label_chunks_pure.shape)  # Should be [num_chunks, chunk_size]

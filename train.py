@@ -215,6 +215,8 @@ def train_and_evaluate(models, n_splits, model_names, device, data, label):
                             model, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'TMC': tmc, 'TMC_l': tmc_l, 'ACC': acc},
                             best_val_rmse, f'best_model_{model_name}_fold_{fold + 1}.pth'
                         )
+                        plot_hr(all_outputs, all_labels, model_name, sampling_rate=28)
+                        plot_bvp(all_outputs, all_labels, model_name)
 
                 fold_results.append(best_metrics)
 
@@ -274,7 +276,7 @@ def train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device):
             print(f"Fold {fold + 1}, Epoch {epoch + 1}/{num_epochs}, Train Loss: {train_loss:.4f}")
 
             # Evaluate on validation set
-            val_loss, metrics, metrics_rgb = evaluate_ampnet_model(fusion_model, val_loader, criterion, device)
+            val_loss, metrics, metrics_rgb, all_outputs, all_outputs_rgb, all_labels = evaluate_ampnet_model(fusion_model, val_loader, criterion, device)
 
             print(f"Fold {fold + 1}, Epoch {epoch + 1}/{num_epochs}, Val Loss: {val_loss:.4f}")
             print(f"Metrics: {metrics}, Metrics_RGB: {metrics_rgb}")
@@ -287,6 +289,8 @@ def train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device):
                     best_val_rmse, f'best_model_AMPNet_fold_{fold + 1}.pth'
                 )
                 print(f"Fold {fold + 1}: Best model saved with Validation RMSE: {best_val_rmse:.4f}")
+                plot_hr(all_outputs, all_labels, model_name, sampling_rate=28)
+                plot_bvp(all_outputs, all_labels, model_name)
             
             mae, rmse, pcc, snr_pred, tmc, tmc_l, acc = metrics_rgb
             print(f"R-3EDSAN, Fold {fold + 1}, Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
@@ -296,7 +300,8 @@ def train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device):
                     best_val_rmse_rgb, f'best_model_RGB_fold_{fold + 1}.pth'
                 )
                 print(f"Fold {fold + 1}: Best model saved with Validation RMSE: {best_val_rmse_rgb:.4f}")
-
+                plot_hr(all_outputs_rgb, all_labels, model_name, sampling_rate=28)
+                plot_bvp(all_outputs_rgb, all_labels, model_name)
         # Save fold results
         fold_results.append(best_metrics)
         fold_results_rgb.append(best_metrics_rgb)

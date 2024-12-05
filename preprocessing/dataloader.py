@@ -5,7 +5,8 @@ import mediapipe as mp
 import pandas as pd
 import cv2
 import logging
-
+import glob
+import json
 
 logger = logging.basicConfig(filename="rppg.app", filemode='w', level=logging.DEBUG)
 
@@ -137,8 +138,109 @@ def load_iBVP_dataset(dataset_path, target_length=5376):
     all_thermal_faces_np = np.array(all_thermal_faces)
     all_labels_np = np.array(all_labels)
 
-    logging.DEBUG("collected datasets, preparing for preprocessing")
+    logger.DEBUG("collected datasets, preparing for preprocessing")
 
     return all_rgb_faces_np, all_thermal_faces_np, all_labels_np
+
+
+def read_video(video_file):
+    """Reads a video file, detects faces, and returns resized face frames."""
+    frames = []
+    all_png = sorted(glob.glob(os.path.join(video_file, '*.png')))
+    
+    mp_face_detection = mp.solutions.face_detection
+    face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.2)
+
+    for png_path in all_png:
+        img = cv2.imread(png_path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        # Detect faces
+        results = face_detection.process(img)
+
+        if results.detections:
+            for detection in results.detections:
+                bboxC = detection.location_data.relative_bounding_box
+                ih, iw, _ = img.shape
+                x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
+
+                face_img = img[y:y+h, x:x+w]
+                face_img = cv2.resize(face_img, (64, 64))
+                frames.append(face_img)
+        else:
+            # If no face is detected, resize the entire frame
+            img_resized = cv2.resize(img, (64, 64))
+            frames.append(img_resized)
+    
+    return np.asarray(frames)
+
+
+def read_wave(bvp_file):
+    """Reads a BVP signal file."""
+    with open(bvp_file, "r") as f:
+        labels = json.load(f)
+        waves = [label["Value"]["waveform"] for label in labels["/FullPackage"]]
+    return np.asarray(waves)
+
+def sample_data(data, num_points):
+    """Samples `num_points` from `data` with a step size."""
+    step_size = max(1, len(data) // num_points)
+    return data[::step_size][:num_points]
+
+def load_and_sample_PURE_data(base_path, num_points=1792):
+    """Loads and samples video frames and BVP signals from the dataset."""
+    data = {}
+
+    for person_folder in os.listdir(base_path):
+        print(f"Processing person {person_folder}")
+        person_path = os.path.join(base_path, person_folder)
+        if not os.path.isdir(person_path):
+            continue
+
+        videos = []
+        bvps = []
+
+        for session_folder in os.listdir(person_path):
+            session_path = os.path.join(person_path, session_folder)
+            if not os.path.isdir(session_path):
+                continue
+
+            #video_path = os.path.join(session_path, session_folder)
+            video_frames = read_video(session_path)
+            bvp_file = session_path + '.json'
+            bvp_signal = read_wave(bvp_file)
+
+            videos.append(video_frames)
+            bvps.append(bvp_signal)
+
+        if videos and bvps:
+            combined_videos = np.concatenate(videos, axis=0)
+            combined_bvps = np.concatenate(bvps, axis=0)
+
+            sampled_videos = sample_data(combined_videos, num_points)
+            sampled_bvps = sample_data(combined_bvps, num_points)
+
+            data[person_folder] = {
+                'videos': sampled_videos,
+                'bvps': sampled_bvps
+            }
+
+    return data
+
+def extract_PURE_videos_and_bvps(base_path):
+    
+    sampled_data = load_and_sample_PURE_data(base_path, num_points=1792)
+    videos_pure = []
+    bvps_pure = []
+
+    for date in sampled_data:
+        videos_pure.append(sampled_data[date]['videos'])
+        bvps_pure.append(sampled_data[date]['bvps'])
+
+    videos_pure = np.array(videos_pure)
+    bvps_pure = np.array(bvps_pure)
+
+    return videos_pure, bvps_pure
+
 
 
