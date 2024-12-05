@@ -1,0 +1,15 @@
+artifact_uri: mlflow-artifacts:/663904345599080160/fb070c01155545cf832167f041ed1e31/artifacts
+end_time: 1733441298310
+entry_point_name: ''
+experiment_id: '663904345599080160'
+lifecycle_stage: active
+run_id: fb070c01155545cf832167f041ed1e31
+run_name: PhysNet
+run_uuid: fb070c01155545cf832167f041ed1e31
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1733440911033
+status: 3
+tags: []
+user_id: jkogo

@@ -129,6 +129,7 @@ if __name__ == "__main__":
              model = PhysNet_padding_Encoder_Decoder_MAX()
         if model_name == "PhysNet":  
             model = N3DED64().to(device)
+            
         model.to(device)
         
         batch_size = 8
