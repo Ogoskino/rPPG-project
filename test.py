@@ -3,6 +3,9 @@ import torch.nn as nn
 import numpy as np
 from evaluate.evaluate import *
 from src.EDSAN import EDSAN, R_3EDSAN, T_3EDSAN
+from src.iBVPNet import iBVPNet
+from src.PhysNet import PhysNet_padding_Encoder_Decoder_MAX
+from src.RTrPPG import N3DED64
 from src.AMPNET import *
 from train import create_kfold_dataloaders, create_custom_dataloaders
 from preprocessing.dataset import *
@@ -29,7 +32,7 @@ def log_and_visualize_results(all_outputs, metrics, all_labels, model_name, samp
         all_labels = np.concatenate(all_labels, axis=0)
 
     # Compute metrics
-    if model_name in ["AMPNet", "R3EDSAN"]:
+    if model_name == "AMPNet":
         mae, rmse, pcc, snr_pred, tmc, tmc_l, acc = metrics
     else:
         metrics = compute_metrics(all_outputs, all_labels)
@@ -101,12 +104,11 @@ def test_model(model, model_path, dataloader_fn, dataset, batch_size, criterion,
 
 
 if __name__ == "__main__":
-
+    dataset_division = "random"
+    model_name = "AMPNet"  # Name of your model, used for logging/plotting
     mlflow.set_tracking_uri("http://127.0.0.1:5000")
     mlflow.set_experiment("test_model")
     with mlflow.start_run():
-
-        model_name = "AMPNet"  # Name of your model, used for logging/plotting
         videos = torch.rand(56, 4, 192, 64, 64)
         label = torch.rand(56, 192)
         
@@ -116,19 +118,31 @@ if __name__ == "__main__":
             model_path = "model_paths/best_model_AMPNet_fold_1.pth"
         else:
             dataset = Dataset(data=videos, labels=label)
-            model_path = "model_paths/best_model_RGB_fold_1.pth"
-
-        # Assuming the model, dataset, and other parameters are set
-        model = EDSAN(n_channels=1, model='thermal').to(device)  # Replace with your model class
+            model_path = "model_paths/best_model_{model_name}_fold_1.pth"
+        if model_name == "Thermal":
+            model = EDSAN(n_channels=1, model='thermal')
+        if model_name == "RGB":
+            model = EDSAN()
+        if model_name == "iBVPNet":
+             model = iBVPNet(in_channels=3, frames=192, debug=True)
+        if model_name == "PhysNet":
+             model = PhysNet_padding_Encoder_Decoder_MAX()
+        if model_name == "PhysNet":  
+            model = N3DED64().to(device)
+        model.to(device)
         
         batch_size = 8
         k = 2  # Number of folds for KFold or custom splitting
         mode = "eval"  # Mode for testing (usually "eval" for testing)
         criterion = nn.MSELoss()  # Replace with your loss function
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
 
-        # Example: Test using K-Fold DataLoader
-        test_model(
-            model, model_path, create_kfold_dataloaders, dataset, batch_size, criterion, device, model_name, k=k, mode=mode
-        )
+        
+        if dataset_division == "random":
+            test_model(
+                model, model_path, create_kfold_dataloaders, dataset, batch_size, criterion, device, model_name, k=k, mode=mode
+            )
+        else:
+                        test_model(
+                model, model_path, create_custom_dataloaders, dataset, batch_size, criterion, device, model_name, k=k, mode=mode
+            )

@@ -23,12 +23,11 @@ from torchinfo import summary
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
 mlflow.set_experiment("rppg_project")
 
-model_classes = [EDSAN, EDSAN]  # Model classes instead of instances
-criterion_classes = [nn.MSELoss, nn.MSELoss]
-optimizer_classes = [optim.Adam, optim.Adam]
-scheduler_classes = [None, None] 
-model_names = ['RGB', 'Thermal']
-
+model_classes = [EDSAN, EDSAN, iBVPNet, PhysNet_padding_Encoder_Decoder_MAX, N3DED64]  # Model classes instead of instances
+criterion_classes = [nn.MSELoss, nn.MSELoss, CosineSimilarityLoss, nn.MSELoss, NPSNR]
+optimizer_classes = [optim.Adam, optim.Adam, optim.Adam, optim.Adam, optim.Adam]
+scheduler_classes = [None, None,optim.lr_scheduler.StepLR, None, None]  # Optional
+model_names = ['RGB', 'Thermal', 'iBVPNet', 'PhysNet','RTrPPG']
 
 
 
@@ -395,42 +394,45 @@ def train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=torch.devi
 
 if __name__ == "__main__":
 
-    #dataset_path = r'C:\Users\jkogo\OneDrive\Desktop\PHD resources\datasets\iBVP_Dataset'
-    #rgb_face, thermal_face, label = load_iBVP_dataset(dataset_path)
-    #a, b = preprocess_data(rgb_face, thermal_face, label)
-    #videos, labels = to_tensor(a,b)
+    dataset_path = r'C:\Users\jkogo\OneDrive\Desktop\PHD resources\datasets\iBVP_Dataset'
+    rgb_face, thermal_face, label = load_iBVP_dataset(dataset_path)
+    a, b = preprocess_iBVP_data(rgb_face, thermal_face, label)
+    video_chunks, label_chunks = extract_segments(a, b)
+    print(video_chunks.shape)  # Should be [num_chunks, chunk_size, height, width, channels]
+    print(label_chunks.shape)  # Should be [num_chunks, chunk_size]
+    model_name = "AMPNet"
+
+    
+
+    if model_name != "AMPNet":
+        fold_results, avg_results = train_and_evaluate(
+            model_classes, n_splits=2, model_names=model_names, device=device,data=video_chunks, label=label_chunks
+        )
+        #Print Results
+        print("\nSummary of Results Across All Models and Folds:")
+        for model_name in model_names:
+            print(f"\nResults for {model_name}:")
+            print(tabulate(fold_results[model_name], headers="keys"))
+
+        print("\nAverage Results for Each Model Across All Folds:")
+        print(tabulate(avg_results.items(), headers=["Model Name", "Metrics"]))
 
 
 
-    #videos = torch.rand(56, 4, 192, 64, 64)
-    #label = torch.rand(56, 192)
-    #video_chunks, label_chunks = extract_segments(videos, label)
-    #print(videos.shape)  # Should be [num_chunks, chunk_size, height, width, channels]
-    #print(label.shape)  # Should be [num_chunks, chunk_size]
-    #fold_results, avg_results = train_and_evaluate(
-    #    model_classes, n_splits=2, model_names=model_names, device=device,data=videos, label=label
-    #)
-    #Print Results
-    #print("\nSummary of Results Across All Models and Folds:")
-    #for model_name in model_names:
-    #    print(f"\nResults for {model_name}:")
-    #    print(tabulate(fold_results[model_name], headers="keys"))
 
-    #print("\nAverage Results for Each Model Across All Folds:")
-    #print(tabulate(avg_results.items(), headers=["Model Name", "Metrics"]))
+    if model_name == "AMPNet":
 
 
+        videos = torch.rand(56, 4, 192, 64, 64)
+        label = torch.rand(56, 192)
 
-    videos = torch.rand(56, 4, 192, 64, 64)
-    label = torch.rand(56, 192)
+        fusion_dataloader = create_ampnet_dataloader(videos, label, batch_size=8)
+        # Train the fusion model using the defined fusion_dataloader
+        fold_results, average_results, fold_results_rgb, average_results_rgb = train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device)
 
-    fusion_dataloader = create_ampnet_dataloader(videos, label, batch_size=8)
-    # Train the fusion model using the defined fusion_dataloader
-    fold_results, average_results, fold_results_rgb, average_results_rgb = train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=3, device=device)
-
-    # Print the tabulated results for fold results
-    print("\nSummary of Results Across All Folds:")
-    print(tabulate(fold_results, headers="keys"))
-    print(tabulate(fold_results_rgb, headers="keys"))
-    print(tabulate(average_results.items(), headers=["Metric", "Average Value"], tablefmt="grid"))
-    print(tabulate(average_results_rgb.items(), headers=["Metric", "Average Value"], tablefmt="grid"))
+        # Print the tabulated results for fold results
+        print("\nSummary of Results Across All Folds:")
+        print(tabulate(fold_results, headers="keys"))
+        print(tabulate(fold_results_rgb, headers="keys"))
+        print(tabulate(average_results.items(), headers=["Metric", "Average Value"], tablefmt="grid"))
+        print(tabulate(average_results_rgb.items(), headers=["Metric", "Average Value"], tablefmt="grid"))
