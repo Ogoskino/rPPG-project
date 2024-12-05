@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from preprocessing.dataloader import *
+from dataloader import *
 
 
 
@@ -41,8 +41,8 @@ def preprocess_PURE_data(rgb_face, label):
 
 def extract_segments(videos, bvps, sequence_length=192):
 
-    total_frames, height, width, num_channels = videos.shape
-    assert total_frames % sequence_length == 0, "Total frames must be divisible by sequence length."
+    n_videos, total_frames, height, width, num_channels = videos.shape
+    assert (n_videos*total_frames) % sequence_length == 0, "Total frames must be divisible by sequence length."
     
     # Define reshape shapes
     video_shape = (-1, num_channels, sequence_length, height, width)
@@ -60,7 +60,7 @@ def extract_segments(videos, bvps, sequence_length=192):
 
 if __name__ == "__main__":
 
-    data = 'iBVP'
+    data = 'PURE'
 
     if data == 'iBVP':
         dataset_path = r'C:\Users\jkogo\OneDrive\Desktop\PHD resources\datasets\iBVP_Dataset'
@@ -71,8 +71,9 @@ if __name__ == "__main__":
         print(label_chunks.shape)  # Should be [num_chunks, chunk_size]
 
     else:
-        base_path = r'C:\Users\n1071552\Desktop\Pure'
-        videos_pure, bvps_pure = extract_PURE_videos_and_bvps(base_path)
+        #base_path = r'C:\Users\n1071552\Desktop\Pure'
+        #videos_pure, bvps_pure = extract_PURE_videos_and_bvps(base_path)
+        videos_pure, bvps_pure = np.random.rand(12, 1792, 64, 64, 3), np.random.rand(12, 1792)
         a_pure, b_pure = preprocess_PURE_data(videos_pure, bvps_pure)
         video_chunks_pure, label_chunks_pure = extract_segments(a_pure, b_pure)
         print(video_chunks_pure.shape)  # Should be [num_chunks, chunk_size, height, width, channels]

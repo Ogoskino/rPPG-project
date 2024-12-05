@@ -138,8 +138,6 @@ def load_iBVP_dataset(dataset_path, target_length=5376):
     all_thermal_faces_np = np.array(all_thermal_faces)
     all_labels_np = np.array(all_labels)
 
-    logger.DEBUG("collected datasets, preparing for preprocessing")
-
     return all_rgb_faces_np, all_thermal_faces_np, all_labels_np
 
 
