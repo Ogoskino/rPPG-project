@@ -1,10 +1,11 @@
 DEBUG:urllib3.connectionpool:Starting new HTTP connection (1): 127.0.0.1:5000
 DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "GET /api/2.0/mlflow/experiments/get-by-name?experiment_name=rppg_project HTTP/11" 200 268
+DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "GET /api/2.0/mlflow/experiments/get-by-name?experiment_name=test_model HTTP/11" 200 266
 DEBUG:git.cmd:Popen(['git', 'version'], cwd=C:\Users\jkogo\OneDrive\Desktop\projects\rPPG_project, stdin=None, shell=False, universal_newlines=False)
 DEBUG:git.cmd:Popen(['git', 'version'], cwd=C:\Users\jkogo\OneDrive\Desktop\projects\rPPG_project, stdin=None, shell=False, universal_newlines=False)
 DEBUG:git.cmd:Popen(['git', 'check-ignore', 'C:\\Users\\jkogo\\OneDrive\\Desktop\\projects\\rPPG_project'], cwd=C:\Users\jkogo\OneDrive\Desktop\projects\rPPG_project, stdin=None, shell=False, universal_newlines=False)
 DEBUG:git.cmd:Popen(['git', 'cat-file', '--batch-check'], cwd=C:\Users\jkogo\OneDrive\Desktop\projects\rPPG_project, stdin=<valid stream>, shell=False, universal_newlines=False)
-DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "POST /api/2.0/mlflow/runs/create HTTP/11" 200 992
+DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "POST /api/2.0/mlflow/runs/create HTTP/11" 200 996
 DEBUG:matplotlib.pyplot:Loaded backend tkagg version 8.6.
 DEBUG:PIL.PngImagePlugin:STREAM b'IHDR' 16 13
 DEBUG:PIL.PngImagePlugin:STREAM b'sBIT' 41 4
@@ -341,8 +342,8 @@ DEBUG:matplotlib.font_manager:findfont: score(FontEntry(fname='C:\\Windows\\Font
 DEBUG:matplotlib.font_manager:findfont: score(FontEntry(fname='C:\\Windows\\Fonts\\GeorgiaPro-CondBlack.ttf', name='Georgia Pro', style='normal', variant='normal', weight=900, stretch='condensed', size='scalable')) = 10.725
 DEBUG:matplotlib.font_manager:findfont: score(FontEntry(fname='C:\\Windows\\Fonts\\Gabriola.ttf', name='Gabriola', style='normal', variant='normal', weight=400, stretch='normal', size='scalable')) = 10.05
 DEBUG:matplotlib.font_manager:findfont: Matching sans\-serif:style=normal:variant=normal:weight=normal:stretch=normal:size=10.0 to DejaVu Sans ('c:\\Users\\jkogo\\OneDrive\\Desktop\\projects\\rPPG_project\\rppg\\lib\\site-packages\\matplotlib\\mpl-data\\fonts\\ttf\\DejaVuSans.ttf') with score of 0.050000.
-DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "GET /api/2.0/mlflow/runs/get?run_uuid=b5e2ed695e0a46d2a1bba0e8596072f9&run_id=b5e2ed695e0a46d2a1bba0e8596072f9 HTTP/11" 200 992
-DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "PUT /api/2.0/mlflow-artifacts/artifacts/733321842450044039/b5e2ed695e0a46d2a1bba0e8596072f9/artifacts/hr_true_vs_pred_Thermal.png HTTP/11" 200 2
+DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "GET /api/2.0/mlflow/runs/get?run_uuid=e5b98028ace6417991b4bae43dc62793&run_id=e5b98028ace6417991b4bae43dc62793 HTTP/11" 200 996
+DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "PUT /api/2.0/mlflow-artifacts/artifacts/165866128088490064/e5b98028ace6417991b4bae43dc62793/artifacts/hr_true_vs_pred_AMPNet.png HTTP/11" 200 2
 DEBUG:PIL.PngImagePlugin:STREAM b'IHDR' 16 13
 DEBUG:PIL.PngImagePlugin:STREAM b'sBIT' 41 4
 DEBUG:PIL.PngImagePlugin:b'sBIT' 41 4 (unknown)
@@ -388,7 +389,7 @@ DEBUG:PIL.PngImagePlugin:STREAM b'sBIT' 41 4
 DEBUG:PIL.PngImagePlugin:b'sBIT' 41 4 (unknown)
 DEBUG:PIL.PngImagePlugin:STREAM b'pHYs' 57 9
 DEBUG:PIL.PngImagePlugin:STREAM b'IDAT' 78 626
-DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "PUT /api/2.0/mlflow-artifacts/artifacts/733321842450044039/b5e2ed695e0a46d2a1bba0e8596072f9/artifacts/pred_true_bvp_1_Thermal.png HTTP/11" 200 2
+DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "PUT /api/2.0/mlflow-artifacts/artifacts/165866128088490064/e5b98028ace6417991b4bae43dc62793/artifacts/pred_true_bvp_1_AMPNet.png HTTP/11" 200 2
 DEBUG:PIL.PngImagePlugin:STREAM b'IHDR' 16 13
 DEBUG:PIL.PngImagePlugin:STREAM b'sBIT' 41 4
 DEBUG:PIL.PngImagePlugin:b'sBIT' 41 4 (unknown)
@@ -434,6 +435,7 @@ DEBUG:PIL.PngImagePlugin:STREAM b'sBIT' 41 4
 DEBUG:PIL.PngImagePlugin:b'sBIT' 41 4 (unknown)
 DEBUG:PIL.PngImagePlugin:STREAM b'pHYs' 57 9
 DEBUG:PIL.PngImagePlugin:STREAM b'IDAT' 78 626
-DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "PUT /api/2.0/mlflow-artifacts/artifacts/733321842450044039/b5e2ed695e0a46d2a1bba0e8596072f9/artifacts/pred_true_bvp_2_Thermal.png HTTP/11" 200 2
-DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "GET /api/2.0/mlflow/runs/get?run_uuid=b5e2ed695e0a46d2a1bba0e8596072f9&run_id=b5e2ed695e0a46d2a1bba0e8596072f9 HTTP/11" 200 992
-DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "POST /api/2.0/mlflow/runs/update HTTP/11" 200 452
+DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "PUT /api/2.0/mlflow-artifacts/artifacts/165866128088490064/e5b98028ace6417991b4bae43dc62793/artifacts/pred_true_bvp_2_AMPNet.png HTTP/11" 200 2
+DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "POST /api/2.0/mlflow/runs/log-batch HTTP/11" 200 2
+DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "GET /api/2.0/mlflow/runs/get?run_uuid=e5b98028ace6417991b4bae43dc62793&run_id=e5b98028ace6417991b4bae43dc62793 HTTP/11" 200 2014
+DEBUG:urllib3.connectionpool:http://127.0.0.1:5000 "POST /api/2.0/mlflow/runs/update HTTP/11" 200 454

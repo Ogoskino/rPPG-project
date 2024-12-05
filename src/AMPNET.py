@@ -57,13 +57,13 @@ def load_models(rgb_model, thermal_model, device):
     rgb_models = []
     thermal_models = []
 
-    rgb_model_path = 'best_model_RGB_fold_2.pth'
+    rgb_model_path = 'model_paths/best_model_RGB_fold_2.pth'
     rgb_model = rgb_model
     rgb_model.load_state_dict(torch.load(rgb_model_path, weights_only=True, map_location=device))
     rgb_model.eval()
     rgb_models.append(rgb_model)
 
-    thermal_model_path = 'best_model_Thermal_fold_2.pth'
+    thermal_model_path = 'model_paths/best_model_Thermal_fold_2.pth'
     thermal_model = thermal_model
     thermal_model.load_state_dict(torch.load(thermal_model_path, weights_only=True, map_location=device))
     thermal_model.eval()
