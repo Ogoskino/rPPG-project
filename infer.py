@@ -54,7 +54,7 @@ def infer_model(model_path, data, batch_size=32):
 
 
 if __name__ == "__main__":
-    model_path = "model_paths/best_model_AMPNet_fold_1.pth"
+    model_path = "model_paths/AMPNet.pth"
     data =  np.random.rand(56, 4, 192, 64, 64)
     outputs = infer_model(model_path, data)
     print(outputs)
