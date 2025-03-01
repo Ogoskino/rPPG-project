@@ -224,6 +224,8 @@ def evaluate_heart_rate_predictions(hr_truth, hr_pred):
 
 def calculate_tmc(signals, reshape_size=28):
     batch_size, signal_length = signals.shape
+
+    print("inside_tmc")
     
     # Step 1: Reshape the signals to [28, -1, 192]
     reshaped_signals = signals.reshape(reshape_size, -1, signal_length)  # [28, batch_segments, 192]

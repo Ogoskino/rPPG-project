@@ -57,8 +57,8 @@ def plot_heart_rate(hr_true, hr_pred, model_name, save_dir='./plots/HRs'):
 
     # Plotting the heart rate
     plt.figure(figsize=(8, 6))
-    plt.plot(hr_true * 60, label='Ground-Truth', color='black', marker='o', markersize=3)
-    plt.plot(hr_pred * 60, label=model_name, color='teal', linestyle='--', marker='o', markersize=3)
+    plt.plot(hr_true, label='Ground-Truth', color='black', marker='o', markersize=3)
+    plt.plot(hr_pred, label=model_name, color='teal', linestyle='--', marker='o', markersize=3)
     plt.xlabel('Time')
     plt.ylabel('Heart Rate in BPM')
     plt.legend()

@@ -4,9 +4,10 @@ import os
 import mlflow
 from torchinfo import summary
 from evaluate.plots import *
+from evaluation.post_process import *
 
 
-def evaluate_model(model, dataloader, criterion, device, model_name):
+def evaluate_model(model, dataloader, criterion, device, model_name, sampling_rate=28):
     """Evaluates the model and calculates metrics."""
     model.eval()
     val_loss = 0.0
@@ -28,20 +29,32 @@ def evaluate_model(model, dataloader, criterion, device, model_name):
     all_outputs = torch.cat(all_outputs).cpu().numpy()
     all_labels = torch.cat(all_labels).cpu().numpy()
 
-    return val_loss, all_outputs, all_labels
+    metrics = compute_metrics(all_outputs, all_labels, sampling_rate)
+
+    return val_loss, metrics, all_outputs, all_labels            
+
 
 def compute_metrics(outputs, labels, sampling_rate=28):
     """Calculates and returns various metrics."""
-    hr_pred, hr_true, snr_pred = get_peak_frequencies_and_snr_batch(outputs, labels, sampling_rate)
+
+    hr_labels, hr_preds, SNRs, maccs = [], [], [], []
+    for i in range(outputs.shape[0]):
+        hr_true, hr_pred, SNR, macc = calculate_metric_per_video(outputs[i], labels[i], fs=sampling_rate, diff_flag=True, use_bandpass=True, hr_method='FFT')
+        hr_labels.append(hr_true)
+        hr_preds.append(hr_pred)
+        SNRs.append(SNR)
+        maccs.append(macc)
+
+    #hr_true, hr_pred, snr_pred, macc = calculate_metric_per_video(outputs, labels, fs=sampling_rate, diff_flag=True, use_bandpass=True, hr_method='FFT')
     mae = mean_absolute_error(hr_true, hr_pred)
     rmse = root_mean_square_error(hr_true, hr_pred)
     pcc = pearson_correlation(hr_true, hr_pred)
-    snr_pred = calculate_mean_snr(snr_pred)
-    tmc = calculate_tmc(outputs)
-    tmc_l = calculate_tmc(labels)
-    tmc_acc = compute_accuracy(tmc_l, tmc)
+    snr_pred = np.array(SNRs).mean()
+    #tmc = calculate_tmc(outputs)
+    #tmc_l = calculate_tmc(labels)
+    #tmc_acc = compute_accuracy(tmc_l, tmc)
 
-    return mae, rmse, pcc, snr_pred, tmc, tmc_l, tmc_acc
+    return mae, rmse, pcc, snr_pred, macc
 
 def plot_bvp(outputs, labels, model_name):
     plot_bvp_signals(outputs, labels, model_name)
@@ -49,8 +62,16 @@ def plot_bvp(outputs, labels, model_name):
 
 def plot_hr(outputs, labels, model_name, sampling_rate=28):
     """Calculates and returns various metrics."""
-    hr_pred, hr_true, _ = get_peak_frequencies_and_snr_batch(outputs, labels, sampling_rate)
-    plot_heart_rate(hr_true, hr_pred, model_name)
+
+    hr_labels, hr_preds = [], []
+    for i in range(outputs.shape[0]):
+        hr_true, hr_pred, _, _ = calculate_metric_per_video(outputs[i], labels[i], fs=sampling_rate, diff_flag=True, use_bandpass=True, hr_method='FFT')
+        hr_labels.append(hr_true)
+        hr_preds.append(hr_pred)
+
+    #hr_true, hr_pred, _, _ = calculate_metric_per_video(outputs, labels, fs=sampling_rate, diff_flag=True, use_bandpass=True, hr_method='FFT')
+
+    plot_heart_rate(hr_labels, hr_preds, model_name)
 
 
 def save_best_model(model, metrics, best_rmse, filename, folder_path="model_paths"):
@@ -104,11 +125,14 @@ def log_model_summary(model, model_name, input_size, device, folder_path="model_
     
 def evaluate_ampnet_model(fusion_model, dataloader, criterion, device, sampling_rate=28):
     """Evaluates the fusion model and computes metrics."""
+    
     fusion_model.eval()
     val_loss = 0.0
     all_outputs, all_labels, all_outputs_rgb = [], [], []
+    
 
     with torch.no_grad():
+        
         for rgb_inputs, thermal_inputs, labels in dataloader:
             rgb_inputs = rgb_inputs.to(device)
             thermal_inputs = thermal_inputs.to(device)
@@ -124,6 +148,7 @@ def evaluate_ampnet_model(fusion_model, dataloader, criterion, device, sampling_
             all_outputs.append(outputs)
             all_outputs_rgb.append(outputs_rgb)
             all_labels.append(labels)
+            
 
     val_loss /= len(dataloader.dataset)
     all_outputs = torch.cat(all_outputs).cpu().numpy()

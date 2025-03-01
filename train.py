@@ -20,15 +20,6 @@ from preprocessing.preprocess import *
 from src.AMPNET import *
 from torchinfo import summary
 
-mlflow.set_tracking_uri("http://127.0.0.1:5000")
-mlflow.set_experiment("rppg_project")
-
-model_classes = [EDSAN, EDSAN, iBVPNet, PhysNet_padding_Encoder_Decoder_MAX, N3DED64]  # Model classes instead of instances
-criterion_classes = [nn.MSELoss, nn.MSELoss, CosineSimilarityLoss, nn.MSELoss, NPSNR]
-optimizer_classes = [optim.Adam, optim.Adam, optim.Adam, optim.Adam, optim.Adam]
-scheduler_classes = [None, None,optim.lr_scheduler.StepLR, None, None]  # Optional
-model_names = ['RGB', 'Thermal', 'iBVPNet', 'PhysNet','RTrPPG']
-
 
 
 def log_model_summary(model, model_name, input_size, device, folder_path="model_summaries"):
@@ -186,7 +177,7 @@ def create_custom_dataloaders(dataset, batch_size, k=4, mode="train"):
     
     dataloaders = []
 
-    for train_idx, val_idx in folds:
+    for i, (train_idx, val_idx) in enumerate(folds):
         if mode == "train":
             # Create train and validation subsets using the indices from the custom folds
             train_subset = Subset(dataset, train_idx)
@@ -200,7 +191,8 @@ def create_custom_dataloaders(dataset, batch_size, k=4, mode="train"):
         else:
             val_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-            dataloaders.append((None, val_dataloader))  # No train loader in eval mode
+            if i == 0:
+                dataloaders.append((None, val_dataloader))  # No train loader in eval mode
 
     return dataloaders
 
@@ -220,18 +212,22 @@ def create_kfold_dataloaders(dataset, batch_size, k=5, mode="train"):
     kfold = KFold(n_splits=k, shuffle=True, random_state=42)
     dataloaders = []
 
-    for train_idx, val_idx in kfold.split(dataset):
+    for i, (train_idx, val_idx) in enumerate(kfold.split(dataset)):
+
         if mode == "train":
+
+            train_subset = Subset(dataset, train_idx)
+            val_subset = Subset(dataset, val_idx)
             # Create DataLoaders for training and validation
-            train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-            val_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+            train_dataloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
+            val_dataloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
 
             dataloaders.append((train_dataloader, val_dataloader))
         else:
             # Use the entire dataset for evaluation
             val_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-
-            dataloaders.append((None, val_dataloader))  # No train loader in eval mode
+            if i == 0:
+                dataloaders.append((None, val_dataloader))  # No train loader in eval mode
 
     return dataloaders
 
@@ -276,11 +272,11 @@ def train_and_evaluate(models, n_splits, model_names, device, data, label):
                     train_loss = train_one_epoch(model, train_dataloader, criterion, optimizer, device, model_name, batch_size=8)
 
                     # Evaluation step
-                    val_loss, all_outputs, all_labels = evaluate_model(model, val_dataloader, criterion, device, model_name)
+                    val_loss, metrics, all_outputs, all_labels = evaluate_model(model, val_dataloader, criterion, device, model_name)
 
                     # Compute metrics
-                    metrics = compute_metrics(all_outputs, all_labels)
-                    mae, rmse, pcc, snr_pred, tmc, tmc_l, acc = metrics
+                    #metrics = compute_metrics(all_outputs, all_labels)
+                    mae, rmse, pcc, snr_pred, macc = metrics
 
                     if scheduler:
                         scheduler.step()
@@ -291,7 +287,7 @@ def train_and_evaluate(models, n_splits, model_names, device, data, label):
                     # Save best model based on RMSE
                     if rmse < best_val_rmse:
                         best_val_rmse, best_metrics = save_best_model(
-                            model, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'TMC': tmc, 'TMC_l': tmc_l, 'ACC': acc},
+                            model, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'MACC': macc},
                             best_val_rmse, f'best_model_{model_name}_fold_{fold + 1}.pth'
                         )
                         plot_hr(all_outputs, all_labels, model_name, sampling_rate=28)
@@ -322,81 +318,93 @@ def train_and_evaluate(models, n_splits, model_names, device, data, label):
 
 def train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=1, device=torch.device('cuda')):
     """Trains and evaluates AMPNet with k-fold cross-validation."""
+    with mlflow.start_run(run_name=model_name, nested=False):
+        mlflow.log_param("Model Name", model_name)
+        mlflow.log_param("K-Folds", num_folds)
     
-    fold_results, fold_results_rgb = [], []
-    
-    # Create K-fold DataLoaders using the provided function
-    dataloaders = create_kfold_dataloaders(fusion_dataloader.dataset, batch_size=8, k=num_folds)
-    
-    for fold, (train_loader, val_loader) in enumerate(dataloaders):
-        print(f"Fold {fold + 1}/{num_folds}")
+        fold_results, fold_results_rgb = [], []
+        
+        # Create K-fold DataLoaders using the provided function
+        dataloaders = create_kfold_dataloaders(fusion_dataloader.dataset, batch_size=8, k=num_folds)
+        
+        for fold, (train_loader, val_loader) in enumerate(dataloaders):
+            print(f"Fold {fold + 1}/{num_folds}")
 
-        # Initialize models and fusion model
-        rgb_models, thermal_models = load_models(R_3EDSAN, T_3EDSAN, device)
-        fusion_model = AMPNet(rgb_models, thermal_models, normalization=True).to(device)
-        # Log the model summary on the first fold
-        input_size = (8, 4, 192, 64, 64)
-        if fold == 0:  # Log summary for the first fold
-            log_model_summary(fusion_model, "AMPNet", input_size, device)
+            # Initialize models and fusion model
+            rgb_models, thermal_models = load_models(R_3EDSAN, T_3EDSAN, device)
+            fusion_model = AMPNet(rgb_models, thermal_models, normalization=True).to(device)
+            # Log the model summary on the first fold
+            input_size = (8, 4, 192, 64, 64)
+            if fold == 0:  # Log summary for the first fold
+                #log_model_summary(fusion_model, "AMPNet", input_size, device)
+                print("past_summary")
 
-        # Loss and optimizer
-        criterion = nn.MSELoss()
-        optimizer = optim.Adam(fusion_model.parameters(), lr=0.001)
+            # Loss and optimizer
+            criterion = nn.MSELoss()
+            optimizer = optim.Adam(fusion_model.parameters(), lr=0.001)
 
-        best_val_rmse = float('inf')
-        best_val_rmse_rgb = float('inf')
-        best_metrics, best_metrics_rgb = {}, {}
+            best_val_rmse = float('inf')
+            best_val_rmse_rgb = float('inf')
+            best_metrics, best_metrics_rgb = {}, {}
 
-        for epoch in range(num_epochs):
-            # Train for one epoch
-            train_loss = train_one_ampnet_epoch(fusion_model, train_loader, criterion, optimizer, device)
-            print(f"Fold {fold + 1}, Epoch {epoch + 1}/{num_epochs}, Train Loss: {train_loss:.4f}")
+            for epoch in range(num_epochs):
+                # Train for one epoch
+                train_loss = train_one_ampnet_epoch(fusion_model, train_loader, criterion, optimizer, device)
+                print(f"Fold {fold + 1}, Epoch {epoch + 1}/{num_epochs}, Train Loss: {train_loss:.4f}")
 
-            # Evaluate on validation set
-            val_loss, metrics, metrics_rgb, all_outputs, all_outputs_rgb, all_labels = evaluate_ampnet_model(fusion_model, val_loader, criterion, device)
+                # Evaluate on validation set
+                val_loss, metrics, metrics_rgb, all_outputs, all_outputs_rgb, all_labels = evaluate_ampnet_model(fusion_model, val_loader, criterion, device)
 
-            print(f"Fold {fold + 1}, Epoch {epoch + 1}/{num_epochs}, Val Loss: {val_loss:.4f}")
-            print(f"Metrics: {metrics}, Metrics_RGB: {metrics_rgb}")
+                print(f"Fold {fold + 1}, Epoch {epoch + 1}/{num_epochs}, Val Loss: {val_loss:.4f}")
+                print(f"Metrics: {metrics}, Metrics_RGB: {metrics_rgb}")
 
-            mae, rmse, pcc, snr_pred, tmc, tmc_l, acc = metrics
-            print(f"AMPNet, Fold {fold + 1}, Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
-            if rmse < best_val_rmse:
-                best_val_rmse, best_metrics = save_best_model(
-                    fusion_model, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'TMC': tmc, 'TMC_l': tmc_l, 'ACC': acc},
-                    best_val_rmse, f'best_model_AMPNet_fold_{fold + 1}.pth'
-                )
-                print(f"Fold {fold + 1}: Best model saved with Validation RMSE: {best_val_rmse:.4f}")
-                plot_hr(all_outputs, all_labels, model_name="AMPNet", sampling_rate=28)
-                plot_bvp(all_outputs, all_labels, model_name="AMPNet")
-            
-            mae, rmse, pcc, snr_pred, tmc, tmc_l, acc = metrics_rgb
-            print(f"R-3EDSAN, Fold {fold + 1}, Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
-            if rmse < best_val_rmse_rgb:
-                best_val_rmse_rgb, best_metrics_rgb = save_best_model(
-                    R_3EDSAN, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'TMC': tmc, 'TMC_l': tmc_l, 'ACC': acc},
-                    best_val_rmse_rgb, f'best_model_RGB_fold_{fold + 1}.pth'
-                )
-                print(f"Fold {fold + 1}: Best model saved with Validation RMSE: {best_val_rmse_rgb:.4f}")
-                plot_hr(all_outputs_rgb, all_labels, model_name="R-3EDSAN", sampling_rate=28)
-                plot_bvp(all_outputs_rgb, all_labels, model_name="R-3EDSAN")
+                mae, rmse, pcc, snr_pred, macc = metrics
+                print(f"AMPNet, Fold {fold + 1}, Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
+                if rmse < best_val_rmse:
+                    best_val_rmse, best_metrics = save_best_model(
+                        fusion_model, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'MACC': macc},
+                        best_val_rmse, f'best_model_AMPNet_fold_{fold + 1}.pth'
+                    )
+                    print(f"Fold {fold + 1}: Best model saved with Validation RMSE: {best_val_rmse:.4f}")
+                    plot_hr(all_outputs, all_labels, model_name="AMPNet", sampling_rate=28)
+                    plot_bvp(all_outputs, all_labels, model_name="AMPNet")
+                
+                mae, rmse, pcc, snr_pred, macc = metrics_rgb
+                print(f"R-3EDSAN, Fold {fold + 1}, Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
+                if rmse < best_val_rmse_rgb:
+                    best_val_rmse_rgb, best_metrics_rgb = save_best_model(
+                        R_3EDSAN, {'MAE': mae, 'RMSE': rmse, 'PCC': pcc, 'SNR_Pred': snr_pred, 'MACC': macc},
+                        best_val_rmse_rgb, f'best_model_RGB_fold_{fold + 1}.pth'
+                    )
+                    print(f"Fold {fold + 1}: Best model saved with Validation RMSE: {best_val_rmse_rgb:.4f}")
+                    plot_hr(all_outputs_rgb, all_labels, model_name="R-3EDSAN", sampling_rate=28)
+                    plot_bvp(all_outputs_rgb, all_labels, model_name="R-3EDSAN")
 
-        # Save fold results
-        fold_results.append(best_metrics)
-        fold_results_rgb.append(best_metrics_rgb)
+            # Save fold results
+            fold_results.append(best_metrics)
+            fold_results_rgb.append(best_metrics_rgb)
+            mlflow.log_artifact(f'model_paths/best_model_{model_name}_fold_{fold + 1}.pth')
 
-    # Compute average metrics across folds
-    avg_metrics = {key: np.mean([result[key] for result in fold_results]) for key in fold_results[0]}
-    avg_metrics_rgb = {key: np.mean([result[key] for result in fold_results_rgb]) for key in fold_results_rgb[0]}
-    print(f"Average Metrics: {avg_metrics}")
-    #print(f"Average Metrics RGB: {avg_metrics_rgb}")
+        # Compute average metrics across folds
+        avg_metrics = {key: np.mean([result[key] for result in fold_results]) for key in fold_results[0]}
+        avg_metrics_rgb = {key: np.mean([result[key] for result in fold_results_rgb]) for key in fold_results_rgb[0]}
+        print(f"Average Metrics: {avg_metrics}")
+        for metric, value in avg_metrics.items():
+            mlflow.log_metric(metric, value)
+        #print(f"Average Metrics RGB: {avg_metrics_rgb}")
 
     return fold_results, avg_metrics, fold_results_rgb, avg_metrics_rgb
 
 
-
-
-
 if __name__ == "__main__":
+
+    mlflow.set_tracking_uri("http://127.0.0.1:5000")
+    #mlflow.set_experiment("rppg_project")
+    model_classes = [EDSAN, EDSAN, iBVPNet, PhysNet_padding_Encoder_Decoder_MAX, N3DED64]  # Model classes instead of instances
+    criterion_classes = [nn.MSELoss, nn.MSELoss, CosineSimilarityLoss, nn.MSELoss, NPSNR]
+    optimizer_classes = [optim.Adam, optim.Adam, optim.Adam, optim.Adam, optim.Adam]
+    scheduler_classes = [None, None,optim.lr_scheduler.StepLR, None, None]  # Optional
+    model_names = ['RGB', 'Thermal', 'iBVPNet', 'PhysNet','RTrPPG']
 
     #dataset_path = r'C:\Users\jkogo\OneDrive\Desktop\PHD resources\datasets\iBVP_Dataset'
     #rgb_face, thermal_face, label = load_iBVP_dataset(dataset_path)
@@ -407,6 +415,7 @@ if __name__ == "__main__":
 
     videos = torch.rand(56, 4, 192, 64, 64)
     label = torch.rand(56, 192)
+
 
     fold_results, avg_results = train_and_evaluate(
         model_classes, n_splits=2, model_names=model_names, device=device,data=videos, label=label
@@ -424,10 +433,15 @@ if __name__ == "__main__":
     model_name = "AMPNet"
     fusion_dataloader = create_ampnet_dataloader(videos, label, batch_size=8)
     # Train the fusion model using the defined fusion_dataloader
+    print("start")
     fold_results, average_results, fold_results_rgb, average_results_rgb = train_AMPNet(fusion_dataloader, num_folds=2, num_epochs=2, device=device)
     # Print the tabulated results for fold results
     print("\nSummary of Results Across All Folds:")
     print(tabulate(fold_results, headers="keys"))
-    #print(tabulate(fold_results_rgb, headers="keys"))
     print(tabulate(average_results.items(), headers=["Metric", "Average Value"], tablefmt="grid"))
-    #print(tabulate(average_results_rgb.items(), headers=["Metric", "Average Value"], tablefmt="grid"))
+
+
+
+
+
+    
